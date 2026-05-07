@@ -5,10 +5,32 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { exec, execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+async function runGcloud(args: string[], raw = false): Promise<unknown> {
+  const fullArgs = raw ? args : [...args, "--format=json"];
+  const { stdout, stderr } = await execFileAsync("gcloud", fullArgs);
+  if (stderr && !stdout) throw new Error(stderr.trim());
+  if (raw) return stdout.trim();
+  return JSON.parse(stdout);
+}
+
+const GCP_PROJECT_ID_RE = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
+const GCP_SA_EMAIL_RE = /^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.iam\.gserviceaccount\.com$/;
+const GCP_REGION_RE = /^[a-z]+-[a-z]+\d+$/;
+const GCP_ZONE_RE = /^[a-z]+-[a-z]+\d+-[a-z]$/;
+const VALID_SEVERITIES = new Set(["DEFAULT","DEBUG","INFO","NOTICE","WARNING","ERROR","CRITICAL","ALERT","EMERGENCY"]);
+
+function validationError(message: string) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify({ error: "INVALID_INPUT", message }) }],
+    isError: true as const,
+  };
+}
 
 async function gcloud(args: string, raw = false): Promise<unknown> {
   const cmd = raw ? `gcloud ${args}` : `gcloud ${args} --format=json`;
