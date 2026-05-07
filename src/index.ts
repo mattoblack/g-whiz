@@ -20,6 +20,8 @@ async function runGcloud(args: string[], raw = false): Promise<unknown> {
   return JSON.parse(stdout);
 }
 
+const DEFAULT_LOG_LIMIT = 50;
+
 const GCP_PROJECT_ID_RE = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 const GCP_SA_EMAIL_RE = /^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.iam\.gserviceaccount\.com$/;
 const GCP_REGION_RE = /^[a-z]+-[a-z]+\d+$/;
@@ -34,6 +36,10 @@ function validationError(message: string) {
   };
 }
 
+function getStringArg(args: Record<string, unknown>, key: string): string | undefined {
+  const v = args[key];
+  return typeof v === "string" ? v : undefined;
+}
 
 const server = new Server(
   { name: "g-whiz", version: "0.1.0" },
@@ -289,7 +295,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (typeof command !== "string" || !command.trim()) {
           return validationError("command must be a non-empty string");
         }
-        // Reject shell metacharacters to prevent injection when args are forwarded to execFile
+        // Escape hatch for ad-hoc gcloud commands not covered by structured tools.
+        // Shell metacharacters are rejected above; tokenization prevents shell injection.
         const SHELL_META_RE = /[;&|`$<>\\()\n\r]/;
         if (SHELL_META_RE.test(command)) {
           return validationError("command must not contain shell metacharacters");
@@ -310,7 +317,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
 
       case "get_project": {
-        const project_id = args.project_id as string | undefined;
+        const project_id = getStringArg(args, "project_id");
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID (6-30 chars, lowercase letters/numbers/hyphens, start with letter, not end with hyphen)");
         }
@@ -319,7 +326,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "list_services": {
-        const project_id = args.project_id as string | undefined;
+        const project_id = getStringArg(args, "project_id");
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID (6-30 chars, lowercase letters/numbers/hyphens, start with letter, not end with hyphen)");
         }
@@ -328,7 +335,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "get_logs": {
-        const project_id = args.project_id as string | undefined;
+        const project_id = getStringArg(args, "project_id");
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID");
         }
@@ -337,11 +344,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const rawLimit = args.limit;
         const limit = (typeof rawLimit === "number" && Number.isInteger(rawLimit) && rawLimit > 0)
           ? Math.min(rawLimit, 1000)
-          : 50;
+          : DEFAULT_LOG_LIMIT;
 
-        const severity = args.severity as string | undefined;
-        const resource_type = args.resource_type as string | undefined;
-        const userFilter = args.filter as string | undefined;
+        const severity = getStringArg(args, "severity");
+        const resource_type = getStringArg(args, "resource_type");
+        const userFilter = getStringArg(args, "filter");
 
         if (severity && !VALID_SEVERITIES.has(severity)) {
           return validationError(`severity must be one of: ${[...VALID_SEVERITIES].join(", ")}`);
@@ -381,7 +388,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "list_log_sinks": {
-        const project_id = args.project_id as string | undefined;
+        const project_id = getStringArg(args, "project_id");
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID");
         }
@@ -390,7 +397,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "list_buckets": {
-        const project_id = args.project_id as string | undefined;
+        const project_id = getStringArg(args, "project_id");
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID (6-30 chars, lowercase letters/numbers/hyphens, start with letter, not end with hyphen)");
         }
@@ -399,7 +406,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "get_iam_policy": {
-        const project_id = args.project_id as string | undefined;
+        const project_id = getStringArg(args, "project_id");
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID (6-30 chars, lowercase letters/numbers/hyphens, start with letter, not end with hyphen)");
         }
@@ -408,7 +415,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "list_firestore_databases": {
-        const project_id = args.project_id as string | undefined;
+        const project_id = getStringArg(args, "project_id");
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID (6-30 chars, lowercase letters/numbers/hyphens, start with letter, not end with hyphen)");
         }
@@ -417,7 +424,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "list_service_accounts": {
-        const project_id = args.project_id as string | undefined;
+        const project_id = getStringArg(args, "project_id");
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID");
         }
@@ -426,7 +433,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "list_roles": {
-        const project_id = args.project_id as string | undefined;
+        const project_id = getStringArg(args, "project_id");
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID");
         }
@@ -438,11 +445,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "list_cloud_run_services": {
-        const project_id = args.project_id as string | undefined;
+        const project_id = getStringArg(args, "project_id");
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID");
         }
-        const region = args.region as string | undefined;
+        const region = getStringArg(args, "region");
         if (region !== undefined && !GCP_REGION_RE.test(region)) {
           return validationError("region must match GCP region format, e.g. us-central1");
         }
@@ -453,15 +460,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "get_cloud_run_service": {
-        const project_id = args.project_id as string | undefined;
+        const project_id = getStringArg(args, "project_id");
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID");
         }
-        const service = args.service as string | undefined;
+        const service = getStringArg(args, "service");
         if (!service || !CLOUD_RUN_SERVICE_NAME_RE.test(service)) {
           return validationError("service must be a valid Cloud Run service name (lowercase, hyphens; max 63 chars)");
         }
-        const region = args.region as string | undefined;
+        const region = getStringArg(args, "region");
         if (!region || !GCP_REGION_RE.test(region)) {
           return validationError("region is required for get_cloud_run_service (e.g. us-central1)");
         }
@@ -474,11 +481,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "list_compute_instances": {
-        const project_id = args.project_id as string | undefined;
+        const project_id = getStringArg(args, "project_id");
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID");
         }
-        const zones = args.zones as string | undefined;
+        const zones = getStringArg(args, "zones");
         if (zones !== undefined) {
           // Validate each comma-separated zone individually
           const zoneList = zones.split(",").map((z) => z.trim()).filter((z) => z.length > 0);
@@ -493,11 +500,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "list_gke_clusters": {
-        const project_id = args.project_id as string | undefined;
+        const project_id = getStringArg(args, "project_id");
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID");
         }
-        const location = args.location as string | undefined;
+        const location = getStringArg(args, "location");
         if (location !== undefined && !GCP_REGION_RE.test(location) && !GCP_ZONE_RE.test(location)) {
           return validationError("location must be a GCP region (e.g. us-central1) or zone (e.g. us-central1-a)");
         }
@@ -508,7 +515,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "get_billing_info": {
-        const project_id = args.project_id as string | undefined;
+        const project_id = getStringArg(args, "project_id");
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID");
         }
@@ -517,8 +524,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "get_service_account": {
-        const email = args.email as string | undefined;
-        const project_id = args.project_id as string | undefined;
+        const email = getStringArg(args, "email");
+        const project_id = getStringArg(args, "project_id");
         if (!email || !GCP_SA_EMAIL_RE.test(email)) {
           return validationError("email must be a valid service account email (name@project.iam.gserviceaccount.com)");
         }
