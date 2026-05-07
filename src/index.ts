@@ -28,6 +28,10 @@ const GCP_REGION_RE = /^[a-z]+-[a-z]+\d+$/;
 const GCP_ZONE_RE = /^[a-z]+-[a-z]+\d+-[a-z]$/;
 const VALID_SEVERITIES = new Set(["DEFAULT","DEBUG","INFO","NOTICE","WARNING","ERROR","CRITICAL","ALERT","EMERGENCY"]);
 const CLOUD_RUN_SERVICE_NAME_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+const SHELL_META_RE = /[;&|`$<>\\()\n\r]/;
+const GCP_LOG_RESOURCE_TYPE_RE = /^[a-z][a-z0-9_]{0,99}$/;
+const MAX_USER_FILTER_LEN = 256;
+const USER_FILTER_SAFE_RE = /^[a-zA-Z0-9_.:"=<>!\s()/-]{1,256}$/;
 
 function validationError(message: string) {
   return {
@@ -298,7 +302,6 @@ export async function handleCallTool(
         }
         // Escape hatch for ad-hoc gcloud commands not covered by structured tools.
         // Shell metacharacters are rejected above; tokenization prevents shell injection.
-        const SHELL_META_RE = /[;&|`$<>\\()\n\r]/;
         if (SHELL_META_RE.test(command)) {
           return validationError("command must not contain shell metacharacters");
         }
@@ -356,7 +359,6 @@ export async function handleCallTool(
         }
 
         // CR-02: validate resource_type against safe identifier pattern
-        const GCP_LOG_RESOURCE_TYPE_RE = /^[a-z][a-z0-9_]{0,99}$/;
         if (resource_type !== undefined && !GCP_LOG_RESOURCE_TYPE_RE.test(resource_type)) {
           return validationError(
             "resource_type must contain only lowercase letters, digits, and underscores (e.g. cloud_run_revision)"
@@ -364,8 +366,6 @@ export async function handleCallTool(
         }
 
         // CR-03: enforce length and character allow-list on free-form filter
-        const MAX_USER_FILTER_LEN = 256;
-        const USER_FILTER_SAFE_RE = /^[a-zA-Z0-9_.:"=<>!\s()/-]{1,256}$/;
         if (userFilter !== undefined) {
           if (userFilter.length > MAX_USER_FILTER_LEN || !USER_FILTER_SAFE_RE.test(userFilter)) {
             return validationError(
