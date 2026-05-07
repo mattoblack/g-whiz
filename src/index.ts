@@ -41,7 +41,7 @@ function getStringArg(args: Record<string, unknown>, key: string): string | unde
   return typeof v === "string" ? v : undefined;
 }
 
-const server = new Server(
+export const server = new Server(
   { name: "g-whiz", version: "0.1.0" },
   { capabilities: { tools: {} } }
 );
