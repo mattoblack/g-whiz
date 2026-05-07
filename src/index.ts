@@ -330,7 +330,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID");
         }
-        const limit = (args.limit as number) ?? 50;
+
+        // CR-04: clamp limit to a valid positive integer; default 50, max 1000
+        const rawLimit = args.limit;
+        const limit = (typeof rawLimit === "number" && Number.isInteger(rawLimit) && rawLimit > 0)
+          ? Math.min(rawLimit, 1000)
+          : 50;
+
         const severity = args.severity as string | undefined;
         const resource_type = args.resource_type as string | undefined;
         const userFilter = args.filter as string | undefined;
@@ -339,14 +345,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return validationError(`severity must be one of: ${[...VALID_SEVERITIES].join(", ")}`);
         }
 
+        // CR-02: validate resource_type against safe identifier pattern
+        const GCP_LOG_RESOURCE_TYPE_RE = /^[a-z][a-z0-9_]{0,99}$/;
+        if (resource_type !== undefined && !GCP_LOG_RESOURCE_TYPE_RE.test(resource_type)) {
+          return validationError(
+            "resource_type must contain only lowercase letters, digits, and underscores (e.g. cloud_run_revision)"
+          );
+        }
+
+        // CR-03: enforce length and character allow-list on free-form filter
+        const MAX_USER_FILTER_LEN = 256;
+        const USER_FILTER_SAFE_RE = /^[a-zA-Z0-9_.:"=<>!\s()/-]{1,256}$/;
+        if (userFilter !== undefined) {
+          if (userFilter.length > MAX_USER_FILTER_LEN || !USER_FILTER_SAFE_RE.test(userFilter)) {
+            return validationError(
+              "filter must be at most 256 characters and contain only safe Cloud Logging filter characters"
+            );
+          }
+        }
+
         const parts: string[] = [];
         if (severity) parts.push(`severity>=${severity}`);
         if (resource_type) parts.push(`resource.type="${resource_type}"`);
         if (userFilter) parts.push(userFilter);
         const logFilter = parts.join(" AND ");
 
-        const logArgs = ["logging", "read", "--project", project_id, "--limit", String(limit)];
-        if (logFilter) logArgs.push(logFilter); // positional arg per RESEARCH.md Pitfall 1
+        // WR-05: positional filter arg must come before flag args
+        const logArgs = ["logging", "read"];
+        if (logFilter) logArgs.push(logFilter); // positional first
+        logArgs.push("--project", project_id, "--limit", String(limit));
         result = await runGcloud(logArgs);
         break;
       }
