@@ -10,8 +10,11 @@
     "url": "https://github.com/mattoblack/g-whiz.git"
   },
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "files": [
-    "dist"
+    "dist/index.js"
   ],
   "bin": {
     "g-whiz": "dist/index.js"
