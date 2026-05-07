@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "GCP MCP server — gives AI assistants live access to Google Cloud via gcloud CLI",
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "bin": {
     "g-whiz": "dist/index.js"
   },
