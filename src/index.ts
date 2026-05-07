@@ -32,13 +32,6 @@ function validationError(message: string) {
   };
 }
 
-async function gcloud(args: string, raw = false): Promise<unknown> {
-  const cmd = raw ? `gcloud ${args}` : `gcloud ${args} --format=json`;
-  const { stdout, stderr } = await execAsync(cmd);
-  if (stderr && !stdout) throw new Error(stderr.trim());
-  if (raw) return stdout.trim();
-  return JSON.parse(stdout);
-}
 
 const server = new Server(
   { name: "g-whiz", version: "0.1.0" },
@@ -157,10 +150,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     let result: unknown;
 
     switch (name) {
-      // Escape hatch: uses exec() by design (see CONTEXT.md D-01). All other tools use runGcloud().
-      case "run_command":
-        result = await gcloud(args.command as string);
+      case "run_command": {
+        // Escape hatch: uses exec() with shell interpolation by design (see CONTEXT.md D-01).
+        // The MCP-calling AI is the intended caller; structured tools use runGcloud() instead.
+        const command = args.command as string | undefined;
+        if (!command || typeof command !== "string") {
+          return validationError("command must be a non-empty string");
+        }
+        const { stdout, stderr } = await execAsync(`gcloud ${command} --format=json`);
+        if (stderr && !stdout) throw new Error(stderr.trim());
+        try {
+          result = JSON.parse(stdout);
+        } catch {
+          result = stdout.trim(); // gcloud may emit non-JSON for some commands; preserve raw output
+        }
         break;
+      }
 
       case "list_projects":
         result = await runGcloud(["projects", "list"]);
