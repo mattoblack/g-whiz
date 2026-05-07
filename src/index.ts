@@ -157,54 +157,76 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     let result: unknown;
 
     switch (name) {
+      // Escape hatch: uses exec() by design (see CONTEXT.md D-01). All other tools use runGcloud().
       case "run_command":
         result = await gcloud(args.command as string);
         break;
 
       case "list_projects":
-        result = await gcloud("projects list");
+        result = await runGcloud(["projects", "list"]);
         break;
 
-      case "get_project":
-        result = await gcloud(`projects describe ${args.project_id}`);
-        break;
-
-      case "list_services":
-        result = await gcloud(`services list --project=${args.project_id}`);
-        break;
-
-      case "get_logs": {
-        const limit = (args.limit as number) ?? 50;
-        const filter = args.filter
-          ? `--filter="${args.filter as string}"`
-          : "";
-        result = await gcloud(
-          `logging read ${filter} --project=${args.project_id as string} --limit=${limit}`
-        );
+      case "get_project": {
+        const project_id = args.project_id as string | undefined;
+        if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
+          return validationError("project_id must be a valid GCP project ID (6-30 chars, lowercase letters/numbers/hyphens, start with letter, not end with hyphen)");
+        }
+        result = await runGcloud(["projects", "describe", project_id]);
         break;
       }
 
-      case "list_buckets":
-        result = await gcloud(
-          `storage buckets list --project=${args.project_id as string}`
-        );
+      case "list_services": {
+        const project_id = args.project_id as string | undefined;
+        if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
+          return validationError("project_id must be a valid GCP project ID (6-30 chars, lowercase letters/numbers/hyphens, start with letter, not end with hyphen)");
+        }
+        result = await runGcloud(["services", "list", "--project", project_id]);
         break;
+      }
 
-      case "get_iam_policy":
-        result = await gcloud(
-          `projects get-iam-policy ${args.project_id as string}`
-        );
+      case "get_logs": {
+        const project_id = args.project_id as string | undefined;
+        if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
+          return validationError("project_id must be a valid GCP project ID (6-30 chars, lowercase letters/numbers/hyphens, start with letter, not end with hyphen)");
+        }
+        const limit = (args.limit as number) ?? 50;
+        const userFilter = args.filter as string | undefined;
+        const logArgs = ["logging", "read", "--project", project_id, "--limit", String(limit)];
+        if (userFilter) logArgs.push(userFilter); // positional arg per RESEARCH.md Pitfall 1
+        result = await runGcloud(logArgs);
         break;
+      }
 
-      case "list_firestore_databases":
-        result = await gcloud(
-          `firestore databases list --project=${args.project_id as string}`
-        );
+      case "list_buckets": {
+        const project_id = args.project_id as string | undefined;
+        if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
+          return validationError("project_id must be a valid GCP project ID (6-30 chars, lowercase letters/numbers/hyphens, start with letter, not end with hyphen)");
+        }
+        result = await runGcloud(["storage", "buckets", "list", "--project", project_id]);
         break;
+      }
+
+      case "get_iam_policy": {
+        const project_id = args.project_id as string | undefined;
+        if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
+          return validationError("project_id must be a valid GCP project ID (6-30 chars, lowercase letters/numbers/hyphens, start with letter, not end with hyphen)");
+        }
+        result = await runGcloud(["projects", "get-iam-policy", project_id]);
+        break;
+      }
+
+      case "list_firestore_databases": {
+        const project_id = args.project_id as string | undefined;
+        if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
+          return validationError("project_id must be a valid GCP project ID (6-30 chars, lowercase letters/numbers/hyphens, start with letter, not end with hyphen)");
+        }
+        result = await runGcloud(["firestore", "databases", "list", "--project", project_id]);
+        break;
+      }
 
       case "get_active_account": {
-        const account = await gcloud("config get-value account", true);
-        const project = await gcloud("config get-value project", true);
+        const account = await runGcloud(["config", "get-value", "account"], true);
+        const project = await runGcloud(["config", "get-value", "project"], true);
         result = { account, project };
         break;
       }
@@ -218,9 +240,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   } catch (error) {
     return {
-      content: [
-        { type: "text", text: `Error: ${(error as Error).message}` },
-      ],
+      content: [{ type: "text", text: JSON.stringify({ error: "EXECUTION_ERROR", message: (error as Error).message }) }],
       isError: true,
     };
   }
