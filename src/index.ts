@@ -152,6 +152,32 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "list_service_accounts",
+      description: "List service accounts in a GCP project. Read-only.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "GCP project ID" },
+        },
+        required: ["project_id"],
+      },
+    },
+    {
+      name: "list_roles",
+      description: "List custom IAM roles defined in a GCP project. Read-only. Note: this returns only the project's custom roles, not the thousands of predefined GCP roles.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "GCP project ID" },
+          show_deleted: {
+            type: "boolean",
+            description: "Include soft-deleted custom roles (default false)",
+          },
+        },
+        required: ["project_id"],
+      },
+    },
+    {
       name: "get_active_account",
       description: "Get the currently authenticated gcloud account and active project.",
       inputSchema: { type: "object", properties: {} },
@@ -264,6 +290,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return validationError("project_id must be a valid GCP project ID (6-30 chars, lowercase letters/numbers/hyphens, start with letter, not end with hyphen)");
         }
         result = await runGcloud(["firestore", "databases", "list", "--project", project_id]);
+        break;
+      }
+
+      case "list_service_accounts": {
+        const project_id = args.project_id as string | undefined;
+        if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
+          return validationError("project_id must be a valid GCP project ID");
+        }
+        result = await runGcloud(["iam", "service-accounts", "list", "--project", project_id]);
+        break;
+      }
+
+      case "list_roles": {
+        const project_id = args.project_id as string | undefined;
+        if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
+          return validationError("project_id must be a valid GCP project ID");
+        }
+        const show_deleted = args.show_deleted === true;
+        const roleArgs = ["iam", "roles", "list", "--project", project_id];
+        if (show_deleted) roleArgs.push("--show-deleted");
+        result = await runGcloud(roleArgs);
         break;
       }
 
