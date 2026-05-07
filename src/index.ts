@@ -178,6 +178,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "get_service_account",
+      description: "Get details and key metadata for a specific service account. Read-only. Returns { account, keys }.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "GCP project ID" },
+          email: {
+            type: "string",
+            description: "Service account email, e.g. name@project.iam.gserviceaccount.com",
+          },
+        },
+        required: ["project_id", "email"],
+      },
+    },
+    {
       name: "get_active_account",
       description: "Get the currently authenticated gcloud account and active project.",
       inputSchema: { type: "object", properties: {} },
@@ -311,6 +326,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const roleArgs = ["iam", "roles", "list", "--project", project_id];
         if (show_deleted) roleArgs.push("--show-deleted");
         result = await runGcloud(roleArgs);
+        break;
+      }
+
+      case "get_service_account": {
+        const email = args.email as string | undefined;
+        const project_id = args.project_id as string | undefined;
+        if (!email || !GCP_SA_EMAIL_RE.test(email)) {
+          return validationError("email must be a valid service account email (name@project.iam.gserviceaccount.com)");
+        }
+        if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
+          return validationError("project_id must be a valid GCP project ID");
+        }
+        const [account, keys] = await Promise.all([
+          runGcloud(["iam", "service-accounts", "describe", email, "--project", project_id]),
+          runGcloud(["iam", "service-accounts", "keys", "list", "--iam-account", email, "--project", project_id]),
+        ]);
+        result = { account, keys };
         break;
       }
 
