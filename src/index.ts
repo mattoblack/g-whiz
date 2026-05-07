@@ -178,6 +178,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "get_billing_info",
+      description: "Get the billing account linked to a GCP project. Read-only. Requires the caller to have billing.resourceAssociations.get permission on the project (typically Billing Account Viewer or Project Billing Manager).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "GCP project ID" },
+        },
+        required: ["project_id"],
+      },
+    },
+    {
       name: "get_service_account",
       description: "Get details and key metadata for a specific service account. Read-only. Returns { account, keys }.",
       inputSchema: {
@@ -326,6 +337,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const roleArgs = ["iam", "roles", "list", "--project", project_id];
         if (show_deleted) roleArgs.push("--show-deleted");
         result = await runGcloud(roleArgs);
+        break;
+      }
+
+      case "get_billing_info": {
+        const project_id = args.project_id as string | undefined;
+        if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
+          return validationError("project_id must be a valid GCP project ID");
+        }
+        result = await runGcloud(["billing", "projects", "describe", project_id]);
         break;
       }
 
