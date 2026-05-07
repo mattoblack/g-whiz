@@ -113,4 +113,12 @@ describe('get_active_account', () => {
     expect(result.isError).toBe(true);
     expect(JSON.parse(result.content[0].text).error).toBe('EXECUTION_ERROR');
   });
+
+  it('returns EXECUTION_ERROR if second runGcloud (project) fails', async () => {
+    mockExecSuccess(mockExecFile, 'me@example.com\n');
+    mockExecError(mockExecFile, 'ERROR: no active project');
+    const result = await handleCallTool('get_active_account', {});
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.content[0].text).error).toBe('EXECUTION_ERROR');
+  });
 });
