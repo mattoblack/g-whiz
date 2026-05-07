@@ -71,7 +71,10 @@ describe('MCP server request handlers', () => {
     // Call an existing tool via the server to exercise the CallTool handler path
     const result = await client.callTool({ name: 'list_projects', arguments: {} });
 
-    expect(result).toBeDefined();
+    expect(result.isError).toBeUndefined();
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].type).toBe('text');
+    expect(JSON.parse(content[0].text)).toBeInstanceOf(Array); // list_projects returns array
 
     await client.close();
     await server.close();
