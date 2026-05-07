@@ -1,7 +1,14 @@
 {
   "name": "g-whiz",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "GCP MCP server — gives AI assistants live access to Google Cloud via gcloud CLI",
+  "license": "MIT",
+  "keywords": ["mcp", "gcp", "google-cloud", "claude", "model-context-protocol", "gcloud", "ai"],
+  "homepage": "https://github.com/mattoblack/g-whiz#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mattoblack/g-whiz.git"
+  },
   "type": "module",
   "files": [
     "dist"
