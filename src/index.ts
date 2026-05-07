@@ -14,6 +14,8 @@ async function runGcloud(args: string[], raw = false): Promise<unknown> {
   const fullArgs = raw ? args : [...args, "--format=json"];
   const { stdout, stderr } = await execFileAsync("gcloud", fullArgs);
   if (stderr && !stdout) throw new Error(stderr.trim());
+  // Surface gcloud warnings (deprecation notices, quota alerts) without failing
+  if (stderr) process.stderr.write(`[gcloud warning] ${stderr.trim()}\n`);
   if (raw) return stdout.trim();
   return JSON.parse(stdout);
 }
