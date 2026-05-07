@@ -24,6 +24,7 @@ const GCP_SA_EMAIL_RE = /^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z0-9]([a-z0-9-]{0,61}[
 const GCP_REGION_RE = /^[a-z]+-[a-z]+\d+$/;
 const GCP_ZONE_RE = /^[a-z]+-[a-z]+\d+-[a-z]$/;
 const VALID_SEVERITIES = new Set(["DEFAULT","DEBUG","INFO","NOTICE","WARNING","ERROR","CRITICAL","ALERT","EMERGENCY"]);
+const CLOUD_RUN_SERVICE_NAME_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 function validationError(message: string) {
   return {
@@ -172,6 +173,70 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           show_deleted: {
             type: "boolean",
             description: "Include soft-deleted custom roles (default false)",
+          },
+        },
+        required: ["project_id"],
+      },
+    },
+    {
+      name: "list_cloud_run_services",
+      description: "List Cloud Run services in a GCP project. Read-only. Region is optional; when omitted, lists across all regions.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "GCP project ID" },
+          region: {
+            type: "string",
+            description: "Optional region, e.g. us-central1. Omit to list across all regions.",
+          },
+        },
+        required: ["project_id"],
+      },
+    },
+    {
+      name: "get_cloud_run_service",
+      description: "Describe a specific Cloud Run service (status, URL, revisions). Read-only. Region is REQUIRED.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "GCP project ID" },
+          service: {
+            type: "string",
+            description: "Cloud Run service name (lowercase, hyphens; max 63 chars)",
+          },
+          region: {
+            type: "string",
+            description: "Region the service is deployed to, e.g. us-central1. REQUIRED — gcloud will hang in non-TTY without it.",
+          },
+        },
+        required: ["project_id", "service", "region"],
+      },
+    },
+    {
+      name: "list_compute_instances",
+      description: "List Compute Engine instances in a GCP project. Read-only. Zones is optional; comma-separated list scopes the listing.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "GCP project ID" },
+          zones: {
+            type: "string",
+            description: "Optional comma-separated list of zones, e.g. 'us-central1-a,us-central1-b'. Omit to list across all zones.",
+          },
+        },
+        required: ["project_id"],
+      },
+    },
+    {
+      name: "list_gke_clusters",
+      description: "List GKE clusters in a GCP project. Read-only. Location (region or zone) is optional; omit to list across all locations.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "GCP project ID" },
+          location: {
+            type: "string",
+            description: "Optional region (e.g. us-central1) or zone (e.g. us-central1-a). Omit to list everywhere.",
           },
         },
         required: ["project_id"],
@@ -337,6 +402,76 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const roleArgs = ["iam", "roles", "list", "--project", project_id];
         if (show_deleted) roleArgs.push("--show-deleted");
         result = await runGcloud(roleArgs);
+        break;
+      }
+
+      case "list_cloud_run_services": {
+        const project_id = args.project_id as string | undefined;
+        if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
+          return validationError("project_id must be a valid GCP project ID");
+        }
+        const region = args.region as string | undefined;
+        if (region !== undefined && !GCP_REGION_RE.test(region)) {
+          return validationError("region must match GCP region format, e.g. us-central1");
+        }
+        const runArgs = ["run", "services", "list", "--project", project_id];
+        if (region) runArgs.push("--region", region);
+        result = await runGcloud(runArgs);
+        break;
+      }
+
+      case "get_cloud_run_service": {
+        const project_id = args.project_id as string | undefined;
+        if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
+          return validationError("project_id must be a valid GCP project ID");
+        }
+        const service = args.service as string | undefined;
+        if (!service || !CLOUD_RUN_SERVICE_NAME_RE.test(service)) {
+          return validationError("service must be a valid Cloud Run service name (lowercase, hyphens; max 63 chars)");
+        }
+        const region = args.region as string | undefined;
+        if (!region || !GCP_REGION_RE.test(region)) {
+          return validationError("region is required for get_cloud_run_service (e.g. us-central1)");
+        }
+        result = await runGcloud([
+          "run", "services", "describe", service,
+          "--project", project_id,
+          "--region", region,
+        ]);
+        break;
+      }
+
+      case "list_compute_instances": {
+        const project_id = args.project_id as string | undefined;
+        if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
+          return validationError("project_id must be a valid GCP project ID");
+        }
+        const zones = args.zones as string | undefined;
+        if (zones !== undefined) {
+          // Validate each comma-separated zone individually
+          const zoneList = zones.split(",").map((z) => z.trim()).filter((z) => z.length > 0);
+          if (zoneList.length === 0 || !zoneList.every((z) => GCP_ZONE_RE.test(z))) {
+            return validationError("zones must be a comma-separated list of GCP zones, e.g. us-central1-a,us-central1-b");
+          }
+        }
+        const computeArgs = ["compute", "instances", "list", "--project", project_id];
+        if (zones) computeArgs.push("--zones", zones);
+        result = await runGcloud(computeArgs);
+        break;
+      }
+
+      case "list_gke_clusters": {
+        const project_id = args.project_id as string | undefined;
+        if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
+          return validationError("project_id must be a valid GCP project ID");
+        }
+        const location = args.location as string | undefined;
+        if (location !== undefined && !GCP_REGION_RE.test(location) && !GCP_ZONE_RE.test(location)) {
+          return validationError("location must be a GCP region (e.g. us-central1) or zone (e.g. us-central1-a)");
+        }
+        const gkeArgs = ["container", "clusters", "list", "--project", project_id];
+        if (location) gkeArgs.push("--location", location);
+        result = await runGcloud(gkeArgs);
         break;
       }
 
