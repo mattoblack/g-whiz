@@ -40,3 +40,16 @@ export function mockExecError(mockFn: Mock, stderr: string): void {
     }
   );
 }
+
+/**
+ * Register a one-shot response where gcloud returns both stdout and stderr.
+ * This exercises the warning path in runGcloud (line 18): stderr is surfaced
+ * via process.stderr.write but the call succeeds (stdout is used for the result).
+ */
+export function mockExecWarning(mockFn: Mock, stdout: string, stderr: string): void {
+  mockFn.mockImplementationOnce(
+    (_cmd: string, _args: string[], cb: ExecFileCallback) => {
+      cb(null, { stdout, stderr });
+    }
+  );
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mockExecSuccess, mockExecError } from './helpers.js'
+import { mockExecSuccess, mockExecError, mockExecWarning } from './helpers.js'
 
 // vi.hoisted runs before imports; vi.mock factory closes over mockExecFile.
 const { mockExecFile } = vi.hoisted(() => ({ mockExecFile: vi.fn() }))
@@ -105,6 +105,16 @@ describe('get_logs', () => {
     const result = await handleCallTool('get_logs', { project_id: 'my-project-id' });
     expect(result.isError).toBe(true);
     expect(JSON.parse(result.content[0].text).error).toBe('EXECUTION_ERROR');
+  });
+
+  it('surfaces gcloud stderr as warning without failing when stdout is also present', async () => {
+    const fixture = [{ insertId: 'log-1' }];
+    mockExecWarning(mockExecFile, JSON.stringify(fixture), 'WARNING: deprecated flag');
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const result = await handleCallTool('get_logs', { project_id: 'my-project-id' });
+    expect(result.isError).toBeUndefined();
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('[gcloud warning]'));
+    stderrSpy.mockRestore();
   });
 });
 
