@@ -185,4 +185,11 @@ describe('list_gke_clusters', () => {
     expect(result.isError).toBe(true);
     expect(JSON.parse(result.content[0].text).error).toBe('EXECUTION_ERROR');
   });
+
+  it('returns INVALID_INPUT on bad project_id', async () => {
+    const result = await handleCallTool('list_gke_clusters', { project_id: 'BAD!' });
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.content[0].text).error).toBe('INVALID_INPUT');
+    expect(mockExecFile).not.toHaveBeenCalled();
+  });
 });
