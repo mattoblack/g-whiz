@@ -5,10 +5,9 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { exec, execFile } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 async function runGcloud(args: string[], raw = false): Promise<unknown> {
@@ -284,13 +283,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     switch (name) {
       case "run_command": {
-        // Escape hatch: uses exec() with shell interpolation by design (see CONTEXT.md D-01).
-        // The MCP-calling AI is the intended caller; structured tools use runGcloud() instead.
-        const command = args.command as string | undefined;
-        if (!command || typeof command !== "string") {
+        const command = args.command;
+        if (typeof command !== "string" || !command.trim()) {
           return validationError("command must be a non-empty string");
         }
-        const { stdout, stderr } = await execAsync(`gcloud ${command} --format=json`);
+        // Reject shell metacharacters to prevent injection when args are forwarded to execFile
+        const SHELL_META_RE = /[;&|`$<>\\()\n\r]/;
+        if (SHELL_META_RE.test(command)) {
+          return validationError("command must not contain shell metacharacters");
+        }
+        const parts = command.trim().split(/\s+/);
+        const { stdout, stderr } = await execFileAsync("gcloud", [...parts, "--format=json"]);
         if (stderr && !stdout) throw new Error(stderr.trim());
         try {
           result = JSON.parse(stdout);
