@@ -283,9 +283,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   ],
 }));
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args = {} } = request.params;
-
+export async function handleCallTool(
+  name: string,
+  args: Record<string, unknown>
+): Promise<{ content: Array<{ type: "text"; text: string }>; isError?: true }> {
   try {
     let result: unknown;
 
@@ -565,7 +566,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       isError: true,
     };
   }
+}
+
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args = {} } = request.params;
+  return handleCallTool(name, args);
 });
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+if (process.env.NODE_ENV !== "test") {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
