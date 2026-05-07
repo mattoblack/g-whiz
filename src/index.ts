@@ -523,6 +523,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
           return validationError("project_id must be a valid GCP project ID");
         }
+        // WR-01: verify the project segment in the email matches project_id
+        const emailProjectMatch = email.match(/^[^@]+@([^.]+)\.iam\.gserviceaccount\.com$/);
+        if (!emailProjectMatch || emailProjectMatch[1] !== project_id) {
+          return validationError("email project segment must match project_id");
+        }
         const [account, keys] = await Promise.all([
           runGcloud(["iam", "service-accounts", "describe", email, "--project", project_id]),
           runGcloud(["iam", "service-accounts", "keys", "list", "--iam-account", email, "--project", project_id]),
