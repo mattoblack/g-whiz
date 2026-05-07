@@ -1,0 +1,22 @@
+{
+  "name": "g-whiz",
+  "version": "0.1.0",
+  "description": "GCP MCP server — gives AI assistants live access to Google Cloud via gcloud CLI",
+  "type": "module",
+  "bin": {
+    "g-whiz": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
