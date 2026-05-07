@@ -1,2 +1,17 @@
 node_modules/
 dist/
+
+# Claude Code / GSD
+.claude/
+.planning/
+CLAUDE.md
+memory/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+*.log
