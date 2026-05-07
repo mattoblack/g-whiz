@@ -85,19 +85,35 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "get_logs",
-      description: "Fetch recent Cloud Logging entries for a project.",
+      description: "Fetch recent Cloud Logging entries for a project with optional severity, resource type, and free-form filter.",
       inputSchema: {
         type: "object",
         properties: {
-          project_id: { type: "string" },
+          project_id: { type: "string", description: "GCP project ID" },
           filter: {
             type: "string",
-            description: "Log filter expression (optional)",
+            description: "Optional Cloud Logging filter expression; combined with severity/resource_type via AND",
           },
-          limit: {
-            type: "number",
-            description: "Max entries to return (default 50)",
+          severity: {
+            type: "string",
+            description: "Optional severity floor (one of DEFAULT, DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY); maps to severity>=VALUE",
           },
+          resource_type: {
+            type: "string",
+            description: "Optional Cloud Logging resource.type, e.g. cloud_run_revision, gce_instance, k8s_container",
+          },
+          limit: { type: "number", description: "Max entries to return (default 50)" },
+        },
+        required: ["project_id"],
+      },
+    },
+    {
+      name: "list_log_sinks",
+      description: "List Cloud Logging export sinks for a project. Read-only.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "GCP project ID" },
         },
         required: ["project_id"],
       },
@@ -192,13 +208,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "get_logs": {
         const project_id = args.project_id as string | undefined;
         if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
-          return validationError("project_id must be a valid GCP project ID (6-30 chars, lowercase letters/numbers/hyphens, start with letter, not end with hyphen)");
+          return validationError("project_id must be a valid GCP project ID");
         }
         const limit = (args.limit as number) ?? 50;
+        const severity = args.severity as string | undefined;
+        const resource_type = args.resource_type as string | undefined;
         const userFilter = args.filter as string | undefined;
+
+        if (severity && !VALID_SEVERITIES.has(severity)) {
+          return validationError(`severity must be one of: ${[...VALID_SEVERITIES].join(", ")}`);
+        }
+
+        const parts: string[] = [];
+        if (severity) parts.push(`severity>=${severity}`);
+        if (resource_type) parts.push(`resource.type="${resource_type}"`);
+        if (userFilter) parts.push(userFilter);
+        const logFilter = parts.join(" AND ");
+
         const logArgs = ["logging", "read", "--project", project_id, "--limit", String(limit)];
-        if (userFilter) logArgs.push(userFilter); // positional arg per RESEARCH.md Pitfall 1
+        if (logFilter) logArgs.push(logFilter); // positional arg per RESEARCH.md Pitfall 1
         result = await runGcloud(logArgs);
+        break;
+      }
+
+      case "list_log_sinks": {
+        const project_id = args.project_id as string | undefined;
+        if (!project_id || !GCP_PROJECT_ID_RE.test(project_id)) {
+          return validationError("project_id must be a valid GCP project ID");
+        }
+        result = await runGcloud(["logging", "sinks", "list", "--project", project_id]);
         break;
       }
 
